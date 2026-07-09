@@ -4,7 +4,6 @@ import chalk from "chalk";
 import { loginCommand } from "./commands/login.js";
 import { buildCommand } from "./commands/build.js";
 import { statusCommand, buildsCommand, projectsCommand } from "./commands/status.js";
-import { serverCommand, setServerCommand } from "./commands/server.js";
 import { addKeyCommand, listKeysCommand, renameKeyCommand, removeKeyCommand } from "./commands/keys.js";
 import { workflowCommand } from "./commands/workflow.js";
 import { resetCommand } from "./commands/reset.js";
@@ -21,20 +20,6 @@ program
   .command("login")
   .description("Authenticate with GitHub")
   .action(loginCommand);
-
-const server = program
-  .command("server")
-  .description("Show or change the Ferome API server");
-
-server
-  .command("show")
-  .description("Show the configured Ferome API server")
-  .action(serverCommand);
-
-server
-  .command("set <url>")
-  .description("Set the Ferome API server")
-  .action(setServerCommand);
 
 const keys = program
   .command("keys")

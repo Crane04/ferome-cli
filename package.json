@@ -1,15 +1,40 @@
 {
-  "name": "ferome",
-  "version": "0.1.0",
-  "description": "iOS builds for Windows developers. No Mac required.",
+  "name": "@ferome/cli",
+  "version": "0.1.1",
+  "description": "iOS builds for Windows developers. No Mac required. Requires a free account at ferome.dev.",
+  "keywords": [
+    "ios",
+    "ipa",
+    "xcode",
+    "expo",
+    "flutter",
+    "react-native",
+    "ci",
+    "cd",
+    "github-actions",
+    "app-store-connect",
+    "code-signing",
+    "windows",
+    "cli"
+  ],
+  "homepage": "https://ferome.dev",
+  "bugs": "https://github.com/Crane04/ferome-cli/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Crane04/ferome-cli"
+  },
   "main": "dist/index.js",
   "bin": {
     "ferome": "./dist/index.js"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "archiver": "^7.0.1",

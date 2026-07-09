@@ -1,12 +1,11 @@
 import chalk from "chalk";
-import { getServerUrl, saveToken } from "../config.js";
+import { SERVER_URL, saveToken } from "../config.js";
 import http from "http";
 import { exec } from "child_process";
 import { URL } from "url";
 
 export async function loginCommand(): Promise<void> {
-  const serverUrl = getServerUrl();
-  const loginUrl = `${serverUrl}/auth/github?cli=1`;
+  const loginUrl = `${SERVER_URL}/auth/github?cli=1`;
 
   console.log(chalk.bold("\nferome login\n"));
   console.log("Opening GitHub to authenticate...");

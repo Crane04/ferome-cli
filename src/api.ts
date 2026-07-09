@@ -1,11 +1,11 @@
-import { getToken, getServerUrl } from "./config.js";
+import { getToken, SERVER_URL } from "./config.js";
 
 async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
   const token = getToken();
-  const url = `${getServerUrl()}${path}`;
+  const url = `${SERVER_URL}${path}`;
 
   const res = await fetch(url, {
     ...options,
