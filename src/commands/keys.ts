@@ -1,10 +1,11 @@
 import chalk from "chalk";
 import fs from "fs";
 import readline from "readline";
-import { listAppleKeys, saveAppleKey } from "../api.js";
+import { listAppleKeys, saveAppleKey, renameAppleKey, deleteAppleKey } from "../api.js";
 import { getToken } from "../config.js";
 
 interface AddKeyOptions {
+  name?: string;
   keyId?: string;
   issuerId?: string;
   file?: string;
@@ -24,6 +25,7 @@ export async function addKeyCommand(opts: AddKeyOptions): Promise<void> {
   const appleKeyId = opts.keyId ?? await prompt("Apple API Key ID: ");
   const issuerId = opts.issuerId ?? await prompt("Apple Issuer ID: ");
   const file = opts.file ?? await prompt(".p8 file path: ");
+  const name = opts.name;
 
   if (!fs.existsSync(file)) {
     console.error(chalk.red(`File not found: ${file}`));
@@ -33,8 +35,38 @@ export async function addKeyCommand(opts: AddKeyOptions): Promise<void> {
   const p8Content = fs.readFileSync(file, "utf8").trim();
 
   try {
-    await saveAppleKey({ appleKeyId, issuerId, p8Content });
+    await saveAppleKey({ appleKeyId, issuerId, p8Content, name });
     console.log(chalk.green(`\nSaved Apple API key ${appleKeyId}.`));
+  } catch (err: unknown) {
+    console.error(chalk.red(err instanceof Error ? err.message : String(err)));
+    process.exit(1);
+  }
+}
+
+export async function renameKeyCommand(appleKeyId: string, name: string): Promise<void> {
+  if (!getToken()) {
+    console.error(chalk.red("Not logged in. Run: ferome login"));
+    process.exit(1);
+  }
+
+  try {
+    await renameAppleKey(appleKeyId, name);
+    console.log(chalk.green(`\nRenamed ${appleKeyId} to "${name}".`));
+  } catch (err: unknown) {
+    console.error(chalk.red(err instanceof Error ? err.message : String(err)));
+    process.exit(1);
+  }
+}
+
+export async function removeKeyCommand(appleKeyId: string): Promise<void> {
+  if (!getToken()) {
+    console.error(chalk.red("Not logged in. Run: ferome login"));
+    process.exit(1);
+  }
+
+  try {
+    await deleteAppleKey(appleKeyId);
+    console.log(chalk.green(`\nDeleted Apple API key ${appleKeyId}.`));
   } catch (err: unknown) {
     console.error(chalk.red(err instanceof Error ? err.message : String(err)));
     process.exit(1);
@@ -58,7 +90,8 @@ export async function listKeysCommand(): Promise<void> {
     console.log(`\n${chalk.bold("Apple API keys:")}\n`);
     for (const key of keys) {
       const date = new Date(key.createdAt).toLocaleDateString();
-      console.log(`${chalk.cyan(key.appleKeyId)}  ${chalk.dim(key.issuerId)}  ${chalk.dim(date)}`);
+      const label = key.name ? `${key.name}  ` : "";
+      console.log(`${chalk.bold(label)}${chalk.cyan(key.appleKeyId)}  ${chalk.dim(key.issuerId)}  ${chalk.dim(date)}`);
     }
   } catch (err: unknown) {
     console.error(chalk.red(err instanceof Error ? err.message : String(err)));

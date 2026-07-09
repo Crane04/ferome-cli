@@ -81,7 +81,7 @@ export async function buildCommand(opts: BuildOptions): Promise<void> {
   const type = detectProjectType(cwd);
 
   if (type === "UNKNOWN") {
-    spinner.fail("Could not detect project type. Make sure you're in an Expo or Xcode project root.");
+    spinner.fail("Could not detect project type. Make sure you're in an Expo, Flutter, React Native, or Xcode project root.");
     process.exit(1);
   }
 
@@ -97,6 +97,15 @@ export async function buildCommand(opts: BuildOptions): Promise<void> {
   let scheme = opts.scheme ?? projectConfig.scheme;
   if (type === "XCODE" && !scheme) {
     const detected = findXcodeScheme(cwd);
+    scheme = detected ?? await prompt("Xcode scheme: ");
+    console.log(chalk.dim(`Using scheme: ${scheme}`));
+  }
+  if (type === "FLUTTER" && !scheme) {
+    scheme = findXcodeScheme(path.join(cwd, "ios")) ?? "Runner";
+    console.log(chalk.dim(`Using scheme: ${scheme}`));
+  }
+  if (type === "REACT_NATIVE" && !scheme) {
+    const detected = findXcodeScheme(path.join(cwd, "ios"));
     scheme = detected ?? await prompt("Xcode scheme: ");
     console.log(chalk.dim(`Using scheme: ${scheme}`));
   }

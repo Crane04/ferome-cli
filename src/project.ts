@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import archiver from "archiver";
 
-export type ProjectType = "EXPO" | "XCODE" | "UNKNOWN";
+export type ProjectType = "EXPO" | "XCODE" | "FLUTTER" | "REACT_NATIVE" | "UNKNOWN";
 
 export interface FeromeProjectConfig {
   projectId?: string;
@@ -31,14 +31,33 @@ export function detectProjectType(dir: string): ProjectType {
     } catch {}
   }
 
+  // Flutter: has pubspec.yaml and an ios/ Xcode project (Runner.xcodeproj/.xcworkspace)
+  const pubspecYaml = path.join(dir, "pubspec.yaml");
+  if (fs.existsSync(pubspecYaml)) {
+    const iosDir = path.join(dir, "ios");
+    if (fs.existsSync(iosDir) && hasXcodeProject(iosDir)) return "FLUTTER";
+  }
+
+  // Bare React Native: package.json depends on react-native, with an ios/ Xcode project
+  const packageJson = path.join(dir, "package.json");
+  if (fs.existsSync(packageJson)) {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(packageJson, "utf8"));
+      const hasReactNative = Boolean(pkg.dependencies?.["react-native"] ?? pkg.devDependencies?.["react-native"]);
+      const iosDir = path.join(dir, "ios");
+      if (hasReactNative && fs.existsSync(iosDir) && hasXcodeProject(iosDir)) return "REACT_NATIVE";
+    } catch {}
+  }
+
   // Xcode: has a .xcodeproj or .xcworkspace
-  const entries = fs.readdirSync(dir);
-  const hasXcode = entries.some(
-    (e) => e.endsWith(".xcodeproj") || e.endsWith(".xcworkspace")
-  );
-  if (hasXcode) return "XCODE";
+  if (hasXcodeProject(dir)) return "XCODE";
 
   return "UNKNOWN";
+}
+
+function hasXcodeProject(dir: string): boolean {
+  const entries = fs.readdirSync(dir);
+  return entries.some((e) => e.endsWith(".xcodeproj") || e.endsWith(".xcworkspace"));
 }
 
 export function findXcodeScheme(dir: string): string | null {
@@ -51,6 +70,7 @@ export function findXcodeScheme(dir: string): string | null {
 export function findBundleId(dir: string, type: ProjectType): string | null {
   if (type === "EXPO") return findExpoBundleId(dir);
   if (type === "XCODE") return findXcodeBundleId(dir);
+  if (type === "FLUTTER" || type === "REACT_NATIVE") return findXcodeBundleId(path.join(dir, "ios"));
   return null;
 }
 
@@ -138,6 +158,9 @@ export function zipProject(dir: string, outputPath: string): Promise<void> {
         ".git/**",
         ".ferome/**",
         "ios/Pods/**",
+        "ios/.symlinks/**",
+        "ios/Flutter/ephemeral/**",
+        ".dart_tool/**",
         "android/**",
         ".expo/**",
         "dist/**",

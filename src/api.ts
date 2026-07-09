@@ -61,7 +61,7 @@ export interface Build {
   id: string;
   projectId?: string;
   status: "QUEUED" | "STARTED" | "SUCCESS" | "FAILED";
-  type: "EXPO" | "XCODE";
+  type: "EXPO" | "XCODE" | "FLUTTER" | "REACT_NATIVE";
   bundleId?: string;
   project?: {
     id: string;
@@ -80,7 +80,7 @@ export interface Build {
 export interface Project {
   id: string;
   name: string;
-  type: "EXPO" | "XCODE";
+  type: "EXPO" | "XCODE" | "FLUTTER" | "REACT_NATIVE";
   bundleId: string;
   githubOwner: string;
   githubRepo: string;
@@ -93,6 +93,7 @@ export interface Project {
 }
 
 export interface AppleApiKey {
+  name?: string | null;
   appleKeyId: string;
   issuerId: string;
   createdAt: string;
@@ -125,10 +126,23 @@ export async function saveAppleKey(data: {
   appleKeyId: string;
   issuerId: string;
   p8Content: string;
+  name?: string;
 }): Promise<void> {
   return request("/builds/keys", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
+}
+
+export async function renameAppleKey(appleKeyId: string, name: string): Promise<void> {
+  return request(`/builds/keys/${encodeURIComponent(appleKeyId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function deleteAppleKey(appleKeyId: string): Promise<void> {
+  return request(`/builds/keys/${encodeURIComponent(appleKeyId)}`, { method: "DELETE" });
 }

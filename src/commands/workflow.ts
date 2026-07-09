@@ -11,6 +11,8 @@ interface WorkflowOptions {
 const WORKFLOW_FILES: Record<Exclude<ProjectType, "UNKNOWN">, string> = {
   EXPO: "expo-ios-build.yml",
   XCODE: "xcode-ios-build.yml",
+  FLUTTER: "flutter-ios-build.yml",
+  REACT_NATIVE: "react-native-ios-build.yml",
 };
 
 export function workflowCommand(opts: WorkflowOptions): void {
@@ -18,7 +20,7 @@ export function workflowCommand(opts: WorkflowOptions): void {
   const type = resolveProjectType(cwd, opts.type);
 
   if (type === "UNKNOWN") {
-    console.error(chalk.red("Could not detect project type. Run this from an Expo or Xcode project, or pass --type EXPO/XCODE."));
+    console.error(chalk.red("Could not detect project type. Run this from an Expo, Flutter, React Native, or Xcode project, or pass --type EXPO/FLUTTER/REACT_NATIVE/XCODE."));
     process.exit(1);
   }
 
@@ -48,7 +50,10 @@ function resolveProjectType(dir: string, optionType?: ProjectType): ProjectType 
 }
 
 function workflowTemplate(type: Exclude<ProjectType, "UNKNOWN">): string {
-  return type === "EXPO" ? expoWorkflow : xcodeWorkflow;
+  if (type === "EXPO") return expoWorkflow;
+  if (type === "FLUTTER") return flutterWorkflow;
+  if (type === "REACT_NATIVE") return reactNativeWorkflow;
+  return xcodeWorkflow;
 }
 
 function printExpoTokenSetup(dir: string): void {
@@ -287,6 +292,248 @@ jobs:
             -exportOptionsPlist ../ExportOptions.plist \\
             -allowProvisioningUpdates
           find ../build/export -name "*.ipa" -maxdepth 1 -print -quit | xargs -I {} cp {} ../app.ipa
+
+      - name: Upload IPA to Ferome
+        run: |
+          curl -f -sS -X POST "\${{ inputs.upload_url }}" -F "ipa=@app.ipa"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-\${{ inputs.build_id }}
+          path: app.ipa
+
+      - name: Notify Ferome success
+        if: success()
+        run: |
+          curl -sS -X POST "$CALLBACK_URL" \\
+            -H "Content-Type: application/json" \\
+            -d "$(printf '{"build_id":"%s","status":"success","run_id":"%s"}' "$BUILD_ID" "$GITHUB_RUN_ID")"
+        env:
+          CALLBACK_URL: \${{ inputs.callback_url }}
+          BUILD_ID: \${{ inputs.build_id }}
+
+      - name: Notify Ferome failure
+        if: failure()
+        run: |
+          curl -sS -X POST "$CALLBACK_URL" \\
+            -H "Content-Type: application/json" \\
+            -d "$(printf '{"build_id":"%s","status":"failed","run_id":"%s"}' "$BUILD_ID" "$GITHUB_RUN_ID")"
+        env:
+          CALLBACK_URL: \${{ inputs.callback_url }}
+          BUILD_ID: \${{ inputs.build_id }}
+`;
+
+const flutterWorkflow = `name: Ferome Flutter iOS Build
+
+"on":
+  workflow_dispatch:
+    inputs:
+${commonInputs}
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Notify Ferome started
+        run: |
+          curl -sS -X POST "$CALLBACK_URL" \\
+            -H "Content-Type: application/json" \\
+            -d "$(printf '{"build_id":"%s","status":"started","run_id":"%s"}' "$BUILD_ID" "$GITHUB_RUN_ID")"
+        env:
+          CALLBACK_URL: \${{ inputs.callback_url }}
+          BUILD_ID: \${{ inputs.build_id }}
+
+      - name: Download project
+        run: |
+          curl -L "\${{ inputs.project_url }}" -o project.zip
+          unzip -q project.zip -d project
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Install Flutter dependencies
+        working-directory: project
+        run: flutter pub get
+
+      - name: Install CocoaPods dependencies
+        working-directory: project/ios
+        run: pod install --repo-update
+
+      - name: Write Apple API key
+        run: |
+          mkdir -p private_keys
+          printf '%s' "$APPLE_API_KEY_CONTENT" > "private_keys/AuthKey_\${{ inputs.apple_api_key_id }}.p8"
+        env:
+          APPLE_API_KEY_CONTENT: \${{ inputs.apple_api_key_content }}
+
+      - name: Build archive
+        working-directory: project/ios
+        env:
+          APP_STORE_CONNECT_API_KEY_KEY_ID: \${{ inputs.apple_api_key_id }}
+          APP_STORE_CONNECT_API_KEY_ISSUER_ID: \${{ inputs.apple_issuer_id }}
+          APP_STORE_CONNECT_API_KEY_KEY: \${{ inputs.apple_api_key_content }}
+        run: |
+          SCHEME="\${{ inputs.scheme }}"
+          if [ -z "$SCHEME" ]; then
+            SCHEME="Runner"
+          fi
+          xcodebuild archive \\
+            -workspace Runner.xcworkspace \\
+            -scheme "$SCHEME" \\
+            -configuration Release \\
+            -archivePath ../../build/App.xcarchive \\
+            -allowProvisioningUpdates
+
+      - name: Export IPA
+        working-directory: project/ios
+        run: |
+          cat > ../../ExportOptions.plist <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild -exportArchive \\
+            -archivePath ../../build/App.xcarchive \\
+            -exportPath ../../build/export \\
+            -exportOptionsPlist ../../ExportOptions.plist \\
+            -allowProvisioningUpdates
+          find ../../build/export -name "*.ipa" -maxdepth 1 -print -quit | xargs -I {} cp {} ../../app.ipa
+
+      - name: Upload IPA to Ferome
+        run: |
+          curl -f -sS -X POST "\${{ inputs.upload_url }}" -F "ipa=@app.ipa"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-\${{ inputs.build_id }}
+          path: app.ipa
+
+      - name: Notify Ferome success
+        if: success()
+        run: |
+          curl -sS -X POST "$CALLBACK_URL" \\
+            -H "Content-Type: application/json" \\
+            -d "$(printf '{"build_id":"%s","status":"success","run_id":"%s"}' "$BUILD_ID" "$GITHUB_RUN_ID")"
+        env:
+          CALLBACK_URL: \${{ inputs.callback_url }}
+          BUILD_ID: \${{ inputs.build_id }}
+
+      - name: Notify Ferome failure
+        if: failure()
+        run: |
+          curl -sS -X POST "$CALLBACK_URL" \\
+            -H "Content-Type: application/json" \\
+            -d "$(printf '{"build_id":"%s","status":"failed","run_id":"%s"}' "$BUILD_ID" "$GITHUB_RUN_ID")"
+        env:
+          CALLBACK_URL: \${{ inputs.callback_url }}
+          BUILD_ID: \${{ inputs.build_id }}
+`;
+
+const reactNativeWorkflow = `name: Ferome React Native iOS Build
+
+"on":
+  workflow_dispatch:
+    inputs:
+${commonInputs}
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Notify Ferome started
+        run: |
+          curl -sS -X POST "$CALLBACK_URL" \\
+            -H "Content-Type: application/json" \\
+            -d "$(printf '{"build_id":"%s","status":"started","run_id":"%s"}' "$BUILD_ID" "$GITHUB_RUN_ID")"
+        env:
+          CALLBACK_URL: \${{ inputs.callback_url }}
+          BUILD_ID: \${{ inputs.build_id }}
+
+      - name: Download project
+        run: |
+          curl -L "\${{ inputs.project_url }}" -o project.zip
+          unzip -q project.zip -d project
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        working-directory: project
+        run: npm ci || npm install
+
+      - name: Install CocoaPods dependencies
+        working-directory: project/ios
+        run: pod install --repo-update
+
+      - name: Write Apple API key
+        run: |
+          mkdir -p private_keys
+          printf '%s' "$APPLE_API_KEY_CONTENT" > "private_keys/AuthKey_\${{ inputs.apple_api_key_id }}.p8"
+        env:
+          APPLE_API_KEY_CONTENT: \${{ inputs.apple_api_key_content }}
+
+      - name: Build archive
+        working-directory: project/ios
+        env:
+          APP_STORE_CONNECT_API_KEY_KEY_ID: \${{ inputs.apple_api_key_id }}
+          APP_STORE_CONNECT_API_KEY_ISSUER_ID: \${{ inputs.apple_issuer_id }}
+          APP_STORE_CONNECT_API_KEY_KEY: \${{ inputs.apple_api_key_content }}
+        run: |
+          SCHEME="\${{ inputs.scheme }}"
+          if [ -z "$SCHEME" ]; then
+            echo "Missing Xcode scheme input"
+            exit 1
+          fi
+          WORKSPACE=$(find . -maxdepth 1 -name "*.xcworkspace" -print -quit)
+          if [ -z "$WORKSPACE" ]; then
+            echo "Could not find an .xcworkspace in ios/ (did pod install run?)"
+            exit 1
+          fi
+          xcodebuild archive \\
+            -workspace "$WORKSPACE" \\
+            -scheme "$SCHEME" \\
+            -configuration Release \\
+            -archivePath ../../build/App.xcarchive \\
+            -allowProvisioningUpdates
+
+      - name: Export IPA
+        working-directory: project/ios
+        run: |
+          cat > ../../ExportOptions.plist <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild -exportArchive \\
+            -archivePath ../../build/App.xcarchive \\
+            -exportPath ../../build/export \\
+            -exportOptionsPlist ../../ExportOptions.plist \\
+            -allowProvisioningUpdates
+          find ../../build/export -name "*.ipa" -maxdepth 1 -print -quit | xargs -I {} cp {} ../../app.ipa
 
       - name: Upload IPA to Ferome
         run: |

@@ -34,15 +34,17 @@ ferome keys add \
   --file ~/Downloads/AuthKey_YOUR_KEY_ID.p8
 ```
 
-List saved keys:
+List, rename, or remove saved keys:
 
 ```sh
 ferome keys list
+ferome keys rename <keyId> "Production team"
+ferome keys remove <keyId>
 ```
 
 ## GitHub Actions workflow
 
-Set up an Expo or Xcode project for Ferome builds:
+Set up an Expo, Flutter, React Native, or Xcode project for Ferome builds:
 
 ```sh
 ferome init
@@ -52,6 +54,8 @@ This creates one of:
 
 ```txt
 .github/workflows/expo-ios-build.yml
+.github/workflows/flutter-ios-build.yml
+.github/workflows/react-native-ios-build.yml
 .github/workflows/xcode-ios-build.yml
 ```
 

@@ -5,7 +5,7 @@ import { loginCommand } from "./commands/login.js";
 import { buildCommand } from "./commands/build.js";
 import { statusCommand, buildsCommand, projectsCommand } from "./commands/status.js";
 import { serverCommand, setServerCommand } from "./commands/server.js";
-import { addKeyCommand, listKeysCommand } from "./commands/keys.js";
+import { addKeyCommand, listKeysCommand, renameKeyCommand, removeKeyCommand } from "./commands/keys.js";
 import { workflowCommand } from "./commands/workflow.js";
 import { resetCommand } from "./commands/reset.js";
 import { expoTokenCommand } from "./commands/expo.js";
@@ -43,6 +43,7 @@ const keys = program
 keys
   .command("add")
   .description("Save an Apple App Store Connect API key")
+  .option("--name <name>", "Label for this key, e.g. \"Production team\"")
   .option("--key-id <id>", "Apple App Store Connect API key ID")
   .option("--issuer-id <id>", "Apple issuer ID")
   .option("--file <path>", "Path to the .p8 private key file")
@@ -52,6 +53,16 @@ keys
   .command("list")
   .description("List saved Apple API keys")
   .action(listKeysCommand);
+
+keys
+  .command("rename <keyId> <name>")
+  .description("Rename a saved Apple API key")
+  .action(renameKeyCommand);
+
+keys
+  .command("remove <keyId>")
+  .description("Delete a saved Apple API key")
+  .action(removeKeyCommand);
 
 const expo = program
   .command("expo")
@@ -86,14 +97,14 @@ program
   .command("init")
   .description("Set up the current project for Ferome builds")
   .option("--force", "Overwrite an existing Ferome workflow")
-  .option("--type <type>", "Project type to set up: EXPO or XCODE")
+  .option("--type <type>", "Project type to set up: EXPO, FLUTTER, REACT_NATIVE, or XCODE")
   .action(workflowCommand);
 
 program
   .command("workflow")
   .description("Install the Ferome GitHub Actions workflow in the current project")
   .option("--force", "Overwrite an existing Ferome workflow")
-  .option("--type <type>", "Project type to install workflow for: EXPO or XCODE")
+  .option("--type <type>", "Project type to install workflow for: EXPO, FLUTTER, REACT_NATIVE, or XCODE")
   .action(workflowCommand);
 
 program
