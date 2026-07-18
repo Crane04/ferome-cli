@@ -221,7 +221,7 @@ jobs:
           BUILD_ID: \${{ inputs.build_id }}
 
       - name: Notify Ferome failure
-        if: failure()
+        if: failure() || cancelled()
         run: |
           curl -sS -X POST "$CALLBACK_URL" \\
             -H "Content-Type: application/json" \\
@@ -326,7 +326,7 @@ jobs:
           BUILD_ID: \${{ inputs.build_id }}
 
       - name: Notify Ferome failure
-        if: failure()
+        if: failure() || cancelled()
         run: |
           curl -sS -X POST "$CALLBACK_URL" \\
             -H "Content-Type: application/json" \\
@@ -444,7 +444,7 @@ jobs:
           BUILD_ID: \${{ inputs.build_id }}
 
       - name: Notify Ferome failure
-        if: failure()
+        if: failure() || cancelled()
         run: |
           curl -sS -X POST "$CALLBACK_URL" \\
             -H "Content-Type: application/json" \\
@@ -568,7 +568,7 @@ jobs:
           BUILD_ID: \${{ inputs.build_id }}
 
       - name: Notify Ferome failure
-        if: failure()
+        if: failure() || cancelled()
         run: |
           curl -sS -X POST "$CALLBACK_URL" \\
             -H "Content-Type: application/json" \\
