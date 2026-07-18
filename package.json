@@ -1,6 +1,6 @@
 {
   "name": "@ferome/cli",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "iOS builds for Windows developers. No Mac required. Requires a free account at ferome.dev.",
   "keywords": [
     "ios",

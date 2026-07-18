@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import chalk from "chalk";
+import packageJson from "../package.json";
 import { loginCommand } from "./commands/login.js";
 import { buildCommand } from "./commands/build.js";
 import { statusCommand, buildsCommand, projectsCommand } from "./commands/status.js";
@@ -14,7 +15,7 @@ const program = new Command();
 program
   .name("ferome")
   .description(chalk.bold("iOS builds for Windows developers. No Mac required."))
-  .version("0.1.0");
+  .version(packageJson.version);
 
 program
   .command("login")
