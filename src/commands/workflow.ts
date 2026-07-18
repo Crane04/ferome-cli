@@ -175,6 +175,9 @@ jobs:
         env:
           EXPO_TOKEN: \${{ secrets.EXPO_TOKEN }}
           AUTO_SUBMIT: \${{ inputs.auto_submit }}
+          ASC_API_KEY_ID: \${{ inputs.apple_api_key_id }}
+          ASC_API_KEY_ISSUER_ID: \${{ inputs.apple_issuer_id }}
+          ASC_API_KEY_PATH: ../private_keys/AuthKey_\${{ inputs.apple_api_key_id }}.p8
         run: |
           UPLOAD_URL="\${{ inputs.upload_url }}"
           BASE_URL=$(echo "$UPLOAD_URL" | sed -E 's#(https?://[^/]+).*#\\1#')
@@ -239,7 +242,13 @@ jobs:
             if (process.env.AUTO_SUBMIT === "true" && creds.ascAppId) {
               easJson.submit ||= {};
               easJson.submit.production ||= {};
-              easJson.submit.production.ios = { ...(easJson.submit.production.ios || {}), ascAppId: creds.ascAppId };
+              easJson.submit.production.ios = {
+                ...(easJson.submit.production.ios || {}),
+                ascAppId: creds.ascAppId,
+                ascApiKeyPath: process.env.ASC_API_KEY_PATH,
+                ascApiKeyIssuerId: process.env.ASC_API_KEY_ISSUER_ID,
+                ascApiKeyId: process.env.ASC_API_KEY_ID,
+              };
             }
 
             fs.writeFileSync(path, JSON.stringify(easJson, null, 2));
