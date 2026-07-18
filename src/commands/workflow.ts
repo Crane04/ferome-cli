@@ -260,7 +260,9 @@ jobs:
           curl -f -sS -X POST "\${{ inputs.upload_url }}" -F "ipa=@app.ipa"
 
       - name: Submit to App Store Connect
+        id: submit
         if: \${{ inputs.auto_submit }}
+        continue-on-error: true
         working-directory: project
         env:
           EXPO_TOKEN: \${{ secrets.EXPO_TOKEN }}
@@ -269,6 +271,26 @@ jobs:
           ASC_API_KEY_PATH: ../private_keys/AuthKey_\${{ inputs.apple_api_key_id }}.p8
         run: |
           eas submit --platform ios --path ../app.ipa --non-interactive
+
+      - name: Notify Ferome submitted
+        if: \${{ inputs.auto_submit && steps.submit.outcome == 'success' }}
+        run: |
+          curl -sS -X POST "$CALLBACK_URL" \\
+            -H "Content-Type: application/json" \\
+            -d "$(printf '{"build_id":"%s","status":"submitted","run_id":"%s"}' "$BUILD_ID" "$GITHUB_RUN_ID")"
+        env:
+          CALLBACK_URL: \${{ inputs.callback_url }}
+          BUILD_ID: \${{ inputs.build_id }}
+
+      - name: Notify Ferome submit failed
+        if: \${{ inputs.auto_submit && steps.submit.outcome == 'failure' }}
+        run: |
+          curl -sS -X POST "$CALLBACK_URL" \\
+            -H "Content-Type: application/json" \\
+            -d "$(printf '{"build_id":"%s","status":"submit_failed","run_id":"%s"}' "$BUILD_ID" "$GITHUB_RUN_ID")"
+        env:
+          CALLBACK_URL: \${{ inputs.callback_url }}
+          BUILD_ID: \${{ inputs.build_id }}
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4

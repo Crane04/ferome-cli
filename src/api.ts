@@ -74,6 +74,8 @@ export interface Build {
   githubWorkflowUrl?: string | null;
   ipaUrl?: string;
   logs?: string;
+  submittedAt?: string | null;
+  submitError?: string | null;
   createdAt: string;
 }
 
