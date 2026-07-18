@@ -218,17 +218,22 @@ jobs:
           }
           EOF
 
-          eas build:configure --platform ios --non-interactive
-
           node -e '
             const fs = require("fs");
-            const easJson = JSON.parse(fs.readFileSync("eas.json", "utf8"));
-            if (!easJson.build || !easJson.build.production) {
-              console.error("eas.json is missing a build.production profile.");
-              process.exit(1);
-            }
+            const path = "eas.json";
+            const easJson = fs.existsSync(path)
+              ? JSON.parse(fs.readFileSync(path, "utf8"))
+              : {
+                  build: {
+                    development: { developmentClient: true, distribution: "internal" },
+                    preview: { distribution: "internal" },
+                    production: {},
+                  },
+                };
+            easJson.build ||= {};
+            easJson.build.production ||= {};
             easJson.build.production.ios = { ...(easJson.build.production.ios || {}), credentialsSource: "local" };
-            fs.writeFileSync("eas.json", JSON.stringify(easJson, null, 2));
+            fs.writeFileSync(path, JSON.stringify(easJson, null, 2));
           '
 
       - name: Initialize git repository for EAS
