@@ -170,6 +170,67 @@ jobs:
             eas init --non-interactive --force
           fi
 
+      - name: Fetch iOS signing credentials
+        working-directory: project
+        env:
+          EXPO_TOKEN: \${{ secrets.EXPO_TOKEN }}
+        run: |
+          UPLOAD_URL="\${{ inputs.upload_url }}"
+          BASE_URL=$(echo "$UPLOAD_URL" | sed -E 's#(https?://[^/]+).*#\\1#')
+          CREDENTIALS_URL="\${BASE_URL}/webhook/ios-credentials?buildId=\${{ inputs.build_id }}"
+
+          mkdir -p ios/certs
+          curl -f -sS "$CREDENTIALS_URL" -o /tmp/ios_credentials.json
+
+          node -e '
+            const fs = require("fs");
+            const creds = JSON.parse(fs.readFileSync("/tmp/ios_credentials.json", "utf8"));
+            fs.writeFileSync("ios/certs/dist_key.pem", creds.privateKeyPem);
+            fs.writeFileSync("ios/certs/dist.der", Buffer.from(creds.certificateContentBase64, "base64"));
+            fs.writeFileSync("ios/certs/profile.mobileprovision", Buffer.from(creds.profileContentBase64, "base64"));
+            fs.writeFileSync("/tmp/p12_password.txt", creds.p12Password);
+          '
+
+          openssl x509 -inform DER -in ios/certs/dist.der -out ios/certs/dist.pem
+
+          P12_PASSWORD=$(cat /tmp/p12_password.txt)
+          openssl pkcs12 -export \\
+            -inkey ios/certs/dist_key.pem \\
+            -in ios/certs/dist.pem \\
+            -out ios/certs/dist.p12 \\
+            -passout pass:"$P12_PASSWORD" \\
+            -legacy \\
+          || openssl pkcs12 -export \\
+            -inkey ios/certs/dist_key.pem \\
+            -in ios/certs/dist.pem \\
+            -out ios/certs/dist.p12 \\
+            -passout pass:"$P12_PASSWORD"
+
+          cat > credentials.json <<EOF
+          {
+            "ios": {
+              "provisioningProfilePath": "ios/certs/profile.mobileprovision",
+              "distributionCertificate": {
+                "path": "ios/certs/dist.p12",
+                "password": "$P12_PASSWORD"
+              }
+            }
+          }
+          EOF
+
+          eas build:configure --platform ios --non-interactive
+
+          node -e '
+            const fs = require("fs");
+            const easJson = JSON.parse(fs.readFileSync("eas.json", "utf8"));
+            if (!easJson.build || !easJson.build.production) {
+              console.error("eas.json is missing a build.production profile.");
+              process.exit(1);
+            }
+            easJson.build.production.ios = { ...(easJson.build.production.ios || {}), credentialsSource: "local" };
+            fs.writeFileSync("eas.json", JSON.stringify(easJson, null, 2));
+          '
+
       - name: Initialize git repository for EAS
         working-directory: project
         run: |
