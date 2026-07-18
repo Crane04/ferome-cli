@@ -158,6 +158,18 @@ jobs:
             exit 1
           fi
 
+      - name: Configure EAS project
+        working-directory: project
+        env:
+          EXPO_TOKEN: \${{ secrets.EXPO_TOKEN }}
+        run: |
+          if node -e "process.exit(require('./app.json').expo?.extra?.eas?.projectId ? 0 : 1)" 2>/dev/null; then
+            echo "EAS project already configured (app.json has expo.extra.eas.projectId)."
+          else
+            echo "No EAS project linked yet — running 'eas init' to create one under this Expo account."
+            eas init --non-interactive --force
+          fi
+
       - name: Initialize git repository for EAS
         working-directory: project
         run: |
