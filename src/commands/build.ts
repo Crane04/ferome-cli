@@ -187,6 +187,11 @@ async function pollBuild(buildId: string): Promise<void> {
           console.log(chalk.cyan(build.ipaUrl));
           console.log(chalk.dim("\nNote: GitHub artifact links require a GitHub login to download."));
         }
+        if (build.submittedAt) {
+          console.log(chalk.green("\nSubmitted to App Store Connect."));
+        } else if (build.submitError) {
+          console.log(chalk.yellow(`\nSubmission to App Store Connect failed: ${build.submitError}`));
+        }
         return;
       }
 
