@@ -174,6 +174,7 @@ jobs:
         working-directory: project
         env:
           EXPO_TOKEN: \${{ secrets.EXPO_TOKEN }}
+          AUTO_SUBMIT: \${{ inputs.auto_submit }}
         run: |
           UPLOAD_URL="\${{ inputs.upload_url }}"
           BASE_URL=$(echo "$UPLOAD_URL" | sed -E 's#(https?://[^/]+).*#\\1#')
@@ -221,6 +222,7 @@ jobs:
           node -e '
             const fs = require("fs");
             const path = "eas.json";
+            const creds = JSON.parse(fs.readFileSync("/tmp/ios_credentials.json", "utf8"));
             const easJson = fs.existsSync(path)
               ? JSON.parse(fs.readFileSync(path, "utf8"))
               : {
@@ -233,6 +235,13 @@ jobs:
             easJson.build ||= {};
             easJson.build.production ||= {};
             easJson.build.production.ios = { ...(easJson.build.production.ios || {}), credentialsSource: "local" };
+
+            if (process.env.AUTO_SUBMIT === "true" && creds.ascAppId) {
+              easJson.submit ||= {};
+              easJson.submit.production ||= {};
+              easJson.submit.production.ios = { ...(easJson.submit.production.ios || {}), ascAppId: creds.ascAppId };
+            }
+
             fs.writeFileSync(path, JSON.stringify(easJson, null, 2));
           '
 
