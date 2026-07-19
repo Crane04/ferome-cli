@@ -162,6 +162,42 @@ const fetchAndInstallCredentialsStep = `      - name: Fetch and install iOS sign
           echo "FEROME_CODE_SIGN_IDENTITY=\${CODE_SIGN_IDENTITY}" >> "$GITHUB_ENV"
           echo "FEROME_PROFILE_UUID=\${PROFILE_UUID}" >> "$GITHUB_ENV"`;
 
+// Submits the built app.ipa to App Store Connect via Apple's own altool, using the
+// same ASC API key already written to private_keys/. Used by Xcode/Flutter/React
+// Native (Expo submits via eas submit instead, in its own workflow template).
+const submitToAppStoreConnectSteps = `      - name: Submit to App Store Connect
+        id: submit
+        if: \${{ inputs.auto_submit }}
+        continue-on-error: true
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          cp private_keys/AuthKey_\${{ inputs.apple_api_key_id }}.p8 ~/.appstoreconnect/private_keys/
+          xcrun altool --upload-app \\
+            -f app.ipa \\
+            -t ios \\
+            --apiKey "\${{ inputs.apple_api_key_id }}" \\
+            --apiIssuer "\${{ inputs.apple_issuer_id }}"
+
+      - name: Notify Ferome submitted
+        if: \${{ inputs.auto_submit && steps.submit.outcome == 'success' }}
+        run: |
+          curl -sS -X POST "$CALLBACK_URL" \\
+            -H "Content-Type: application/json" \\
+            -d "$(printf '{"build_id":"%s","status":"submitted","run_id":"%s"}' "$BUILD_ID" "$GITHUB_RUN_ID")"
+        env:
+          CALLBACK_URL: \${{ inputs.callback_url }}
+          BUILD_ID: \${{ inputs.build_id }}
+
+      - name: Notify Ferome submit failed
+        if: \${{ inputs.auto_submit && steps.submit.outcome == 'failure' }}
+        run: |
+          curl -sS -X POST "$CALLBACK_URL" \\
+            -H "Content-Type: application/json" \\
+            -d "$(printf '{"build_id":"%s","status":"submit_failed","run_id":"%s"}' "$BUILD_ID" "$GITHUB_RUN_ID")"
+        env:
+          CALLBACK_URL: \${{ inputs.callback_url }}
+          BUILD_ID: \${{ inputs.build_id }}`;
+
 const expoWorkflow = `name: Ferome Expo iOS Build
 
 "on":
@@ -481,6 +517,8 @@ ${fetchAndInstallCredentialsStep}
         run: |
           curl -f -sS -X POST "\${{ inputs.upload_url }}" -F "ipa=@app.ipa"
 
+${submitToAppStoreConnectSteps}
+
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
@@ -610,6 +648,8 @@ ${fetchAndInstallCredentialsStep}
       - name: Upload IPA to Ferome
         run: |
           curl -f -sS -X POST "\${{ inputs.upload_url }}" -F "ipa=@app.ipa"
+
+${submitToAppStoreConnectSteps}
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
@@ -741,6 +781,8 @@ ${fetchAndInstallCredentialsStep}
       - name: Upload IPA to Ferome
         run: |
           curl -f -sS -X POST "\${{ inputs.upload_url }}" -F "ipa=@app.ipa"
+
+${submitToAppStoreConnectSteps}
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
