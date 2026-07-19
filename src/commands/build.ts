@@ -117,8 +117,11 @@ export async function buildCommand(opts: BuildOptions): Promise<void> {
 
   try {
     await zipProject(cwd, zipPath);
-    const sizeMB = (fs.statSync(zipPath).size / 1024 / 1024).toFixed(1);
-    zipSpinner.succeed(`Project zipped (${sizeMB} MB)`);
+    const bytes = fs.statSync(zipPath).size;
+    const sizeLabel = bytes < 1024 * 1024
+      ? `${(bytes / 1024).toFixed(0)} KB`
+      : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+    zipSpinner.succeed(`Project zipped (${sizeLabel})`);
   } catch (err) {
     zipSpinner.fail("Failed to zip project");
     console.error(err);
