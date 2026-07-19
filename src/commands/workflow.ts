@@ -480,7 +480,12 @@ jobs:
 
       - name: Install CocoaPods dependencies
         working-directory: project/ios
-        run: pod install --repo-update
+        run: |
+          if [ -f Podfile ]; then
+            pod install --repo-update
+          else
+            echo "No Podfile found (no native plugin dependencies) — skipping pod install."
+          fi
 
       - name: Write Apple API key
         run: |
