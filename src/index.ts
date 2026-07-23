@@ -14,7 +14,7 @@ const program = new Command();
 
 program
   .name("ferome")
-  .description(chalk.bold("iOS builds for Windows developers. No Mac required."))
+  .description(chalk.bold("iOS builds for every developer. No Mac required."))
   .version(packageJson.version);
 
 program

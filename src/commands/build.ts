@@ -5,6 +5,7 @@ import path from "path";
 import os from "os";
 import readline from "readline";
 import {
+  detectGitHubRepo,
   detectProjectType,
   findBundleId,
   findXcodeScheme,
@@ -81,7 +82,7 @@ export async function buildCommand(opts: BuildOptions): Promise<void> {
   const type = detectProjectType(cwd);
 
   if (type === "UNKNOWN") {
-    spinner.fail("Could not detect project type. Make sure you're in an Expo, Flutter, React Native, or Xcode project root.");
+    spinner.fail("Could not detect project type. Make sure you're in an Expo, Flutter, React Native, .NET MAUI, or Xcode project root.");
     process.exit(1);
   }
 
@@ -90,7 +91,7 @@ export async function buildCommand(opts: BuildOptions): Promise<void> {
   // Gather required info
   const detectedBundleId = findBundleId(cwd, type);
   const bundleId = opts.bundleId ?? await promptWithDefault("Bundle identifier", projectConfig.bundleId ?? detectedBundleId);
-  const repoInput = opts.repo ?? await promptWithDefault("Your GitHub repo", projectConfig.githubRepo ?? null);
+  const repoInput = opts.repo ?? await promptWithDefault("Your GitHub repo", projectConfig.githubRepo ?? detectGitHubRepo(cwd));
   const repo = normalizeGitHubRepo(repoInput);
   const appleKeyId = await resolveAppleKeyId(opts.appleKeyId ?? projectConfig.appleKeyId);
 

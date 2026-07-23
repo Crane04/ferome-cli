@@ -1,8 +1,9 @@
 import fs from "fs";
 import path from "path";
+import { execSync } from "child_process";
 import archiver from "archiver";
 
-export type ProjectType = "EXPO" | "XCODE" | "FLUTTER" | "REACT_NATIVE" | "UNKNOWN";
+export type ProjectType = "EXPO" | "XCODE" | "FLUTTER" | "REACT_NATIVE" | "MAUI" | "UNKNOWN";
 
 export interface FeromeProjectConfig {
   projectId?: string;
@@ -49,10 +50,40 @@ export function detectProjectType(dir: string): ProjectType {
     } catch {}
   }
 
+  // .NET MAUI: a .csproj (root or one level down) with <UseMaui>true</UseMaui>
+  if (findMauiProjectFile(dir)) return "MAUI";
+
   // Xcode: has a .xcodeproj or .xcworkspace
   if (hasXcodeProject(dir)) return "XCODE";
 
   return "UNKNOWN";
+}
+
+function findCsprojFiles(dir: string): string[] {
+  const results: string[] = [];
+
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isFile() && entry.name.endsWith(".csproj")) {
+      results.push(path.join(dir, entry.name));
+    } else if (entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "node_modules" && entry.name !== "bin" && entry.name !== "obj") {
+      const nested = path.join(dir, entry.name);
+      for (const nestedEntry of fs.readdirSync(nested, { withFileTypes: true })) {
+        if (nestedEntry.isFile() && nestedEntry.name.endsWith(".csproj")) {
+          results.push(path.join(nested, nestedEntry.name));
+        }
+      }
+    }
+  }
+
+  return results;
+}
+
+export function findMauiProjectFile(dir: string): string | null {
+  for (const csproj of findCsprojFiles(dir)) {
+    const content = fs.readFileSync(csproj, "utf8");
+    if (/<UseMaui>\s*true\s*<\/UseMaui>/i.test(content)) return csproj;
+  }
+  return null;
 }
 
 function hasXcodeProject(dir: string): boolean {
@@ -71,7 +102,30 @@ export function findBundleId(dir: string, type: ProjectType): string | null {
   if (type === "EXPO") return findExpoBundleId(dir);
   if (type === "XCODE") return findXcodeBundleId(dir);
   if (type === "FLUTTER" || type === "REACT_NATIVE") return findXcodeBundleId(path.join(dir, "ios"));
+  if (type === "MAUI") return findMauiBundleId(dir);
   return null;
+}
+
+// Falls back to the local git remote when no .ferome config has a saved repo yet
+// (e.g. a fresh clone, or a project type like MAUI that has no package.json to
+// infer anything from in the first place).
+export function detectGitHubRepo(dir: string): string | null {
+  let remoteUrl: string;
+  try {
+    remoteUrl = execSync("git remote get-url origin", { cwd: dir, stdio: ["ignore", "pipe", "ignore"] })
+      .toString()
+      .trim();
+  } catch {
+    return null;
+  }
+
+  if (!remoteUrl) return null;
+
+  const withoutProtocol = remoteUrl.replace(/^https?:\/\//, "").replace(/^git@github\.com:/, "github.com/");
+  const withoutHost = withoutProtocol.replace(/^github\.com\//, "");
+  const repo = withoutHost.replace(/\.git$/, "").replace(/^\/+|\/+$/g, "");
+
+  return /^[^/]+\/[^/]+$/.test(repo) ? repo : null;
 }
 
 export function readProjectConfig(dir: string): FeromeProjectConfig {
@@ -121,6 +175,22 @@ function findExpoBundleId(dir: string): string | null {
     const match = content.match(/bundleIdentifier\s*:\s*["']([^"']+)["']/);
     if (match?.[1]) return match[1].trim();
   }
+
+  return null;
+}
+
+function findMauiBundleId(dir: string): string | null {
+  const csproj = findMauiProjectFile(dir);
+  if (!csproj) return null;
+
+  const content = fs.readFileSync(csproj, "utf8");
+
+  // Prefer an iOS-specific override (Condition mentioning "ios") over the shared default.
+  const iosSpecific = [...content.matchAll(/<ApplicationId\s+Condition="[^"]*ios[^"]*"[^>]*>([^<]+)<\/ApplicationId>/gi)];
+  if (iosSpecific[0]?.[1]) return iosSpecific[0][1].trim();
+
+  const generic = content.match(/<ApplicationId>([^<]+)<\/ApplicationId>/i);
+  if (generic?.[1]) return generic[1].trim();
 
   return null;
 }
@@ -175,6 +245,10 @@ export function zipProject(dir: string, outputPath: string): Promise<void> {
         ".expo/**",
         "dist/**",
         "build/**",
+        "bin/**",
+        "obj/**",
+        "**/bin/**",
+        "**/obj/**",
         "*.ipa",
         "*.zip",
       ],

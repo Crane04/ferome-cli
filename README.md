@@ -1,6 +1,6 @@
 # ferome
 
-iOS builds for Windows developers. No Mac required.
+iOS builds for every developer. No Mac required.
 
 ```sh
 npm i -g @ferome/cli

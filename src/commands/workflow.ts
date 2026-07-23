@@ -13,6 +13,7 @@ const WORKFLOW_FILES: Record<Exclude<ProjectType, "UNKNOWN">, string> = {
   XCODE: "xcode-ios-build.yml",
   FLUTTER: "flutter-ios-build.yml",
   REACT_NATIVE: "react-native-ios-build.yml",
+  MAUI: "maui-ios-build.yml",
 };
 
 export function workflowCommand(opts: WorkflowOptions): void {
@@ -20,7 +21,7 @@ export function workflowCommand(opts: WorkflowOptions): void {
   const type = resolveProjectType(cwd, opts.type);
 
   if (type === "UNKNOWN") {
-    console.error(chalk.red("Could not detect project type. Run this from an Expo, Flutter, React Native, or Xcode project, or pass --type EXPO/FLUTTER/REACT_NATIVE/XCODE."));
+    console.error(chalk.red("Could not detect project type. Run this from an Expo, Flutter, React Native, .NET MAUI, or Xcode project, or pass --type EXPO/FLUTTER/REACT_NATIVE/MAUI/XCODE."));
     process.exit(1);
   }
 
@@ -53,6 +54,7 @@ function workflowTemplate(type: Exclude<ProjectType, "UNKNOWN">): string {
   if (type === "EXPO") return expoWorkflow;
   if (type === "FLUTTER") return flutterWorkflow;
   if (type === "REACT_NATIVE") return reactNativeWorkflow;
+  if (type === "MAUI") return mauiWorkflow;
   return xcodeWorkflow;
 }
 
@@ -777,6 +779,126 @@ ${fetchAndInstallCredentialsStep}
             -exportPath ../../build/export \\
             -exportOptionsPlist ../../ExportOptions.plist
           find ../../build/export -name "*.ipa" -maxdepth 1 -print -quit | xargs -I {} cp {} ../../app.ipa
+
+      - name: Upload IPA to Ferome
+        run: |
+          curl -f -sS -X POST "\${{ inputs.upload_url }}" -F "ipa=@app.ipa"
+
+${submitToAppStoreConnectSteps}
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-\${{ inputs.build_id }}
+          path: app.ipa
+
+      - name: Notify Ferome success
+        if: success()
+        run: |
+          curl -sS -X POST "$CALLBACK_URL" \\
+            -H "Content-Type: application/json" \\
+            -d "$(printf '{"build_id":"%s","status":"success","run_id":"%s"}' "$BUILD_ID" "$GITHUB_RUN_ID")"
+        env:
+          CALLBACK_URL: \${{ inputs.callback_url }}
+          BUILD_ID: \${{ inputs.build_id }}
+
+      - name: Notify Ferome failure
+        if: failure() || cancelled()
+        run: |
+          curl -sS -X POST "$CALLBACK_URL" \\
+            -H "Content-Type: application/json" \\
+            -d "$(printf '{"build_id":"%s","status":"failed","run_id":"%s"}' "$BUILD_ID" "$GITHUB_RUN_ID")"
+        env:
+          CALLBACK_URL: \${{ inputs.callback_url }}
+          BUILD_ID: \${{ inputs.build_id }}
+`;
+
+const mauiWorkflow = `name: Ferome MAUI iOS Build
+
+"on":
+  workflow_dispatch:
+    inputs:
+${commonInputs}
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Notify Ferome started
+        run: |
+          curl -sS -X POST "$CALLBACK_URL" \\
+            -H "Content-Type: application/json" \\
+            -d "$(printf '{"build_id":"%s","status":"started","run_id":"%s"}' "$BUILD_ID" "$GITHUB_RUN_ID")"
+        env:
+          CALLBACK_URL: \${{ inputs.callback_url }}
+          BUILD_ID: \${{ inputs.build_id }}
+
+      - name: Download project
+        run: |
+          curl -L "\${{ inputs.project_url }}" -o project.zip
+          unzip -q project.zip -d project
+
+      - name: Detect MAUI project file and iOS target framework
+        id: detect
+        run: |
+          CSPROJ=$(find project -maxdepth 2 -iname "*.csproj" -exec grep -liE "<UseMaui>[[:space:]]*true[[:space:]]*</UseMaui>" {} + | head -1)
+          if [ -z "$CSPROJ" ]; then
+            echo "Could not find a .csproj with <UseMaui>true</UseMaui> under project/ (checked root and one level down)."
+            exit 1
+          fi
+
+          TFM=$(grep -oE 'net[0-9]+\\.[0-9]+-ios[0-9.]*' "$CSPROJ" | head -1)
+          if [ -z "$TFM" ]; then
+            echo "Could not find an iOS target framework (e.g. net8.0-ios) in $CSPROJ."
+            exit 1
+          fi
+
+          DOTNET_MAJOR=$(echo "$TFM" | grep -oE '^net[0-9]+' | grep -oE '[0-9]+')
+
+          echo "Found $CSPROJ targeting $TFM"
+          echo "csproj=$CSPROJ" >> "$GITHUB_OUTPUT"
+          echo "tfm=$TFM" >> "$GITHUB_OUTPUT"
+          echo "dotnet_version=\${DOTNET_MAJOR}.0.x" >> "$GITHUB_OUTPUT"
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: \${{ steps.detect.outputs.dotnet_version }}
+
+      - name: Install .NET MAUI workloads
+        # MAUI's build system checks every TargetFrameworks entry declared in the
+        # csproj -- not just the one we're publishing with -f -- so installing only
+        # maui-ios still fails for typical multi-target apps (android;ios;maccatalyst).
+        run: dotnet workload install maui
+
+      - name: Write Apple API key
+        run: |
+          mkdir -p private_keys
+          printf '%s' "$APPLE_API_KEY_CONTENT" > "private_keys/AuthKey_\${{ inputs.apple_api_key_id }}.p8"
+        env:
+          APPLE_API_KEY_CONTENT: \${{ inputs.apple_api_key_content }}
+
+${fetchAndInstallCredentialsStep}
+
+      - name: Build and publish IPA
+        run: |
+          dotnet publish "\${{ steps.detect.outputs.csproj }}" \\
+            -f "\${{ steps.detect.outputs.tfm }}" \\
+            -c Release \\
+            -p:RuntimeIdentifier=ios-arm64 \\
+            -p:ArchiveOnBuild=true \\
+            -p:CodesignKey="$FEROME_CODE_SIGN_IDENTITY" \\
+            -p:CodesignProvision="$FEROME_PROFILE_UUID" \\
+            -p:CodesignTeamId="$FEROME_TEAM_ID"
+
+          IPA=$(find "$(dirname "\${{ steps.detect.outputs.csproj }}")/bin/Release/\${{ steps.detect.outputs.tfm }}" -name "*.ipa" -print -quit)
+          if [ -z "$IPA" ]; then
+            echo "Build succeeded but no .ipa was found under bin/Release/\${{ steps.detect.outputs.tfm }}/."
+            exit 1
+          fi
+          cp "$IPA" app.ipa
 
       - name: Upload IPA to Ferome
         run: |

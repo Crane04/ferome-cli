@@ -61,7 +61,7 @@ export interface Build {
   id: string;
   projectId?: string;
   status: "QUEUED" | "STARTED" | "SUCCESS" | "FAILED";
-  type: "EXPO" | "XCODE" | "FLUTTER" | "REACT_NATIVE";
+  type: "EXPO" | "XCODE" | "FLUTTER" | "REACT_NATIVE" | "MAUI";
   bundleId?: string;
   project?: {
     id: string;
@@ -82,7 +82,7 @@ export interface Build {
 export interface Project {
   id: string;
   name: string;
-  type: "EXPO" | "XCODE" | "FLUTTER" | "REACT_NATIVE";
+  type: "EXPO" | "XCODE" | "FLUTTER" | "REACT_NATIVE" | "MAUI";
   bundleId: string;
   githubOwner: string;
   githubRepo: string;
